@@ -46,8 +46,48 @@ This repository contains the **API** and **Worker** services along with CI/CD wo
 
 ## How to Use
 
-1. Clone the repository  
-2. Install dependencies:  
-   ```bash
-   pip install -r requirements.txt
-   pip install -r requirements-dev.txt
+### Run linting:
+
+```bash
+flake8 .
+black --check .
+isort --check-only .
+mypy .
+Run tests:
+bash
+Copy
+Edit
+pytest --cov=api --cov=worker
+Build Docker images:
+bash
+Copy
+Edit
+docker build -t todo-api:latest ./api
+docker build -t todo-worker:latest ./worker
+Push code and workflows will automatically run on GitHub Actions.
+
+GitHub Actions Workflows
+Build Workflow (.github/workflows/build.yaml) runs on every push and pull request:
+Detects changed files
+
+Installs dependencies
+
+Runs linting, type checking, formatting checks
+
+Runs tests with coverage
+
+Builds Docker images
+
+Runs vulnerability scans
+
+Deploy Workflow (.github/workflows/deploy.yaml) runs after successful build workflow to deploy services.
+Notes
+CI pipeline is configured to continue even if linting or formatting checks fail, allowing builds to proceed while still reporting issues.
+
+Security scans with Trivy ensure Docker images are free from critical vulnerabilities.
+
+Use the provided lint.sh script inside the api/ folder for local linting convenience.
+
+Feel free to contribute or open issues!
+
+© 2025 Zamshed Iqbal Forman
