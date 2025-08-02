@@ -2,21 +2,14 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Generator, Optional
 
-from flask import Flask, jsonify, request, Response
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 
 from config import initialize_services
 from models import Todo, get_db
-from util import (
-    check_elasticmq,
-    check_postgres,
-    check_redis,
-    get_all_todos,
-    get_cached_todo,
-    get_cached_todos,
-    get_todo_by_id,
-    send_notification,
-)
+from util import (check_elasticmq, check_postgres, check_redis, get_all_todos,
+                  get_cached_todo, get_cached_todos, get_todo_by_id,
+                  send_notification)
 
 # Initialize services before creating the Flask app
 initialize_services()
@@ -115,7 +108,10 @@ def create_todo_route() -> Any:
         temp_id = int(datetime.utcnow().timestamp())
         send_notification(temp_id, "todo_created", data)
 
-        return jsonify({"message": "Todo creation has been queued", "todo_id": temp_id}), 202
+        return (
+            jsonify({"message": "Todo creation has been queued", "todo_id": temp_id}),
+            202,
+        )
     except Exception as e:
         logger.error(f"Error creating todo: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
@@ -159,7 +155,10 @@ def update_todo_route(todo_id: int) -> Any:
         data = request.get_json()
         send_notification(todo_id, "todo_updated", data)
 
-        return jsonify({"message": "Todo update has been queued", "todo_id": todo_id}), 202
+        return (
+            jsonify({"message": "Todo update has been queued", "todo_id": todo_id}),
+            202,
+        )
     except Exception as e:
         logger.error(f"Error updating todo {todo_id}: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
@@ -176,7 +175,10 @@ def delete_todo_route(todo_id: int) -> Any:
             session.commit()
         send_notification(todo_id, "todo_deleted")
 
-        return jsonify({"message": "Todo deletion has been queued", "todo_id": todo_id}), 202
+        return (
+            jsonify({"message": "Todo deletion has been queued", "todo_id": todo_id}),
+            202,
+        )
     except Exception as e:
         logger.error(f"Error deleting todo {todo_id}: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500

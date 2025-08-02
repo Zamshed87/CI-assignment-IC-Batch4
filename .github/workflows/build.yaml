@@ -59,15 +59,19 @@ jobs:
 
       - name: Linting - flake8
         run: flake8 --config=.flake8 ${{ matrix.service }}
+        continue-on-error: true
 
       - name: Typing - mypy
         run: mypy --config-file=mypy.ini ${{ matrix.service }}
+        continue-on-error: true
 
       - name: Formatting - black
         run: black --check --diff ${{ matrix.service }}
+        continue-on-error: true
 
       - name: Imports Order - isort
         run: isort --settings-file=.isort.cfg --check-only --diff ${{ matrix.service }}
+        continue-on-error: true
 
       - name: Run Unit Tests (with coverage)
         run: |

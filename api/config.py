@@ -31,6 +31,7 @@ QUEUE_NAME: Optional[str] = os.getenv("SQS_QUEUE_NAME")
 QUEUE_URL: Optional[str] = os.getenv("SQS_QUEUE_URL")
 DLQ_URL: Optional[str] = os.getenv("SQS_DLQ_URL")
 
+
 def ensure_sqs_queue() -> None:
     sqs_config = {
         "region_name": SQS_REGION,
