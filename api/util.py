@@ -1,27 +1,27 @@
-import os
 import json
-import boto3
-from datetime import datetime
-import redis
-from dotenv import load_dotenv
-from config import QUEUE_NAME, QUEUE_URL, DLQ_URL
 import logging
-from sqlalchemy.orm import Session
+import os
+from datetime import datetime
+
+import boto3
+import redis
+from config import DLQ_URL, QUEUE_NAME, QUEUE_URL
+from dotenv import load_dotenv
 from models import Todo, get_db
+from sqlalchemy.orm import Session
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 # Initialize Redis client
-redis_host = os.getenv('REDIS_HOST')
-redis_port = int(os.getenv('REDIS_PORT'))
-redis_password = os.getenv('REDIS_PASSWORD')
+redis_host = os.getenv("REDIS_HOST")
+redis_port = int(os.getenv("REDIS_PORT"))
+redis_password = os.getenv("REDIS_PASSWORD")
 
 logger.info(f"Initializing Redis client with host: {redis_host}, port: {redis_port}")
 
@@ -42,18 +42,20 @@ except Exception as e:
 
 # Initialize SQS client
 sqs_config = {
-    'region_name': os.getenv('SQS_REGION'),
-    'endpoint_url': os.getenv('SQS_QUEUE_URL')
+    "region_name": os.getenv("SQS_REGION"),
+    "endpoint_url": os.getenv("SQS_QUEUE_URL"),
 }
 
 # Only add AWS credentials for local development
-if 'elasticmq' in sqs_config['endpoint_url']:
-    sqs_config.update({
-        'aws_access_key_id': os.getenv('SQS_ACCESS_KEY'),
-        'aws_secret_access_key': os.getenv('SQS_SECRET_KEY')
-    })
+if "elasticmq" in sqs_config["endpoint_url"]:
+    sqs_config.update(
+        {
+            "aws_access_key_id": os.getenv("SQS_ACCESS_KEY"),
+            "aws_secret_access_key": os.getenv("SQS_SECRET_KEY"),
+        }
+    )
 
-sqs = boto3.client('sqs', **sqs_config)
+sqs = boto3.client("sqs", **sqs_config)
 
 # Database operations
 def get_all_todos(db: Session):
@@ -61,6 +63,7 @@ def get_all_todos(db: Session):
     todos = db.query(Todo).all()
     logger.info(f"Found {len(todos)} todos in database")
     return todos
+
 
 def get_todo_by_id(db: Session, todo_id: int):
     logger.info(f"Fetching todo with id {todo_id} from database")
@@ -71,6 +74,7 @@ def get_todo_by_id(db: Session, todo_id: int):
         logger.info(f"Todo {todo_id} not found in database")
     return todo
 
+
 def create_todo(db: Session, todo_data: dict):
     logger.info("Creating new todo in database")
     todo = Todo(**todo_data)
@@ -79,6 +83,7 @@ def create_todo(db: Session, todo_data: dict):
     db.refresh(todo)
     logger.info(f"Created todo with id {todo.id} in database")
     return todo
+
 
 def update_todo(db: Session, todo_id: int, todo_data: dict):
     logger.info(f"Updating todo {todo_id} in database")
@@ -93,6 +98,7 @@ def update_todo(db: Session, todo_id: int, todo_data: dict):
     logger.info(f"Todo {todo_id} not found in database for update")
     return None
 
+
 def delete_todo(db: Session, todo_id: int):
     logger.info(f"Deleting todo {todo_id} from database")
     todo = db.query(Todo).filter(Todo.id == todo_id).first()
@@ -104,24 +110,27 @@ def delete_todo(db: Session, todo_id: int):
     logger.info(f"Todo {todo_id} not found in database for deletion")
     return False
 
+
 # Cache operations
 def get_cached_todos():
     logger.info("Fetching todos from Redis cache")
-    cached_data = redis_client.get('all_todos')
+    cached_data = redis_client.get("all_todos")
     if cached_data:
         logger.info("Found todos in Redis cache")
         return json.loads(cached_data)
     logger.info("No todos found in Redis cache")
     return None
 
+
 def get_cached_todo(todo_id: int):
     logger.info(f"Fetching todo {todo_id} from Redis cache")
-    cached_data = redis_client.get(f'todo:{todo_id}')
+    cached_data = redis_client.get(f"todo:{todo_id}")
     if cached_data:
         logger.info(f"Found todo {todo_id} in Redis cache")
         return json.loads(cached_data)
     logger.info(f"Todo {todo_id} not found in Redis cache")
     return None
+
 
 # Health check functions
 def check_postgres():
@@ -130,47 +139,53 @@ def check_postgres():
         version = db.execute("SELECT version()").scalar()
         db.close()
         logger.info("PostgreSQL health check passed")
-        return {'status': 'healthy', 'version': version}
+        return {"status": "healthy", "version": version}
     except Exception as e:
         logger.error(f"PostgreSQL health check failed: {str(e)}")
-        return {'status': 'unhealthy', 'error': str(e)}
+        return {"status": "unhealthy", "error": str(e)}
+
 
 def check_redis():
     try:
         redis_client.ping()
-        test_key = 'health_check_test'
-        redis_client.set(test_key, 'ok')
+        test_key = "health_check_test"
+        redis_client.set(test_key, "ok")
         value = redis_client.get(test_key)
         redis_client.delete(test_key)
-        if value != b'ok':
-            raise Exception('Redis set/get test failed')
+        if value != b"ok":
+            raise Exception("Redis set/get test failed")
         logger.info("Redis health check passed")
-        return {'status': 'healthy', 'version': redis_client.info()['redis_version']}
+        return {"status": "healthy", "version": redis_client.info()["redis_version"]}
     except Exception as e:
         logger.error(f"Redis health check failed: {str(e)}")
-        return {'status': 'unhealthy', 'error': str(e)}
+        return {"status": "unhealthy", "error": str(e)}
+
 
 def check_elasticmq():
     try:
         response = sqs.list_queues()
-        queues = response.get('QueueUrls', [])
+        queues = response.get("QueueUrls", [])
         queue_exists = any(QUEUE_NAME in q for q in queues)
         if not queue_exists:
             logger.error(f"Required queue {QUEUE_NAME} not found")
-            return {'status': 'unhealthy', 'error': f'Required queue {QUEUE_NAME} not found'}
+            return {
+                "status": "unhealthy",
+                "error": f"Required queue {QUEUE_NAME} not found",
+            }
         logger.info("ElasticMQ health check passed")
-        return {'status': 'healthy', 'queues': len(queues)}
+        return {"status": "healthy", "queues": len(queues)}
     except Exception as e:
         logger.error(f"ElasticMQ health check failed: {str(e)}")
-        return {'status': 'unhealthy', 'error': str(e)}
+        return {"status": "unhealthy", "error": str(e)}
+
 
 def send_notification(todo_id, action, todo_data=None):
     """Send a notification to SQS queue"""
     try:
         message = {
-            'todo_id': todo_id,
-            'action': action,
-            'timestamp': datetime.utcnow().isoformat()
+            "todo_id": todo_id,
+            "action": action,
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
         if todo_data:
@@ -186,15 +201,13 @@ def send_notification(todo_id, action, todo_data=None):
         # Log the final message before sending
         logger.info(f"Sending message to SQS: {message}")
 
-        response = sqs.send_message(
-            QueueUrl=QUEUE_URL,
-            MessageBody=json.dumps(message)
-        )
+        response = sqs.send_message(QueueUrl=QUEUE_URL, MessageBody=json.dumps(message))
         logger.info(f"Notification sent successfully: {message}")
         return response
     except Exception as e:
         logger.error(f"Error sending notification: {e}")
         return None
+
 
 def update_cache(todo_id, todo_data):
     """Update Redis cache with todo data"""
@@ -204,6 +217,7 @@ def update_cache(todo_id, todo_data):
     except Exception as e:
         logger.error(f"Error updating cache: {e}")
 
+
 def get_from_cache(todo_id):
     """Get todo data from Redis cache"""
     try:
@@ -212,6 +226,7 @@ def get_from_cache(todo_id):
     except Exception as e:
         logger.error(f"Error getting from cache: {e}")
         return None
+
 
 def delete_from_cache(todo_id):
     """Delete todo data from Redis cache"""

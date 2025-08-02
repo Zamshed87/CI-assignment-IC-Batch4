@@ -1,16 +1,16 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import os
 import json
-from datetime import datetime
 import logging
+import os
+from datetime import datetime
+
 from config import initialize_services
-from util import (
-    get_all_todos, get_todo_by_id, create_todo, update_todo, delete_todo,
-    get_cached_todos, get_cached_todo,
-    check_postgres, check_redis, check_elasticmq, send_notification
-)
-from models import get_db, Todo
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from models import Todo, get_db
+from util import (check_elasticmq, check_postgres, check_redis, create_todo,
+                  delete_todo, get_all_todos, get_cached_todo,
+                  get_cached_todos, get_todo_by_id, send_notification,
+                  update_todo)
 
 # Initialize services before creating the Flask app
 initialize_services()
@@ -18,7 +18,7 @@ initialize_services()
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -31,58 +31,70 @@ app.debug = True
 # Add request logging middleware
 @app.before_request
 def log_request_info():
-    logger.info('Request: %s %s - Headers: %s - Body: %s',
-                request.method,
-                request.url,
-                dict(request.headers),
-                request.get_data(as_text=True))
+    logger.info(
+        "Request: %s %s - Headers: %s - Body: %s",
+        request.method,
+        request.url,
+        dict(request.headers),
+        request.get_data(as_text=True),
+    )
+
 
 @app.after_request
 def log_response_info(response):
-    logger.info('Response: %s %s - Status: %s - Headers: %s - Body: %s',
-                request.method,
-                request.url,
-                response.status,
-                dict(response.headers),
-                response.get_data(as_text=True))
+    logger.info(
+        "Response: %s %s - Status: %s - Headers: %s - Body: %s",
+        request.method,
+        request.url,
+        response.status,
+        dict(response.headers),
+        response.get_data(as_text=True),
+    )
     return response
 
-@app.route('/_health', methods=['GET'])
-def health():
-    return jsonify({
-        'status': 'ok',
-    }), 200
 
-@app.route('/health', methods=['GET'])
+@app.route("/_health", methods=["GET"])
+def health():
+    return (
+        jsonify(
+            {
+                "status": "ok",
+            }
+        ),
+        200,
+    )
+
+
+@app.route("/health", methods=["GET"])
 def health_check():
     postgres_status = check_postgres()
     redis_status = check_redis()
     elasticmq_status = check_elasticmq()
 
     status = {
-        'timestamp': datetime.utcnow().isoformat(),
-        'services': {
-            'postgres': postgres_status,
-            'redis': redis_status,
-            'elasticmq': elasticmq_status
-        }
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": {
+            "postgres": postgres_status,
+            "redis": redis_status,
+            "elasticmq": elasticmq_status,
+        },
     }
 
     is_healthy = all(
-        service['status'] == 'healthy'
-        for service in status['services'].values()
+        service["status"] == "healthy" for service in status["services"].values()
     )
 
     return jsonify(status), 200 if is_healthy else 503
 
-@app.route('/todos', methods=['GET'])
+
+@app.route("/todos", methods=["GET"])
 def get_todos():
     try:
         # Try to get todos from Redis cache
         cached_data = get_cached_todos()
         if cached_data:
             logger.info("Returning todos from cache")
-            return jsonify(cached_data['todos']), 200
+            return jsonify(cached_data["todos"]), 200
 
         # If not in cache, get from database
         db = next(get_db())
@@ -92,24 +104,26 @@ def get_todos():
         return jsonify([todo.to_dict() for todo in todos]), 200
     except Exception as e:
         logger.error(f"Error fetching todos: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/todos', methods=['POST'])
+
+@app.route("/todos", methods=["POST"])
 def create_todo_route():
     try:
         data = request.get_json()
         temp_id = int(datetime.utcnow().timestamp())
-        send_notification(temp_id, 'todo_created', data)
+        send_notification(temp_id, "todo_created", data)
 
-        return jsonify({
-            'message': 'Todo creation has been queued',
-            'todo_id': temp_id
-        }), 202
+        return (
+            jsonify({"message": "Todo creation has been queued", "todo_id": temp_id}),
+            202,
+        )
     except Exception as e:
         logger.error(f"Error creating todo: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/todos/<int:todo_id>', methods=['GET'])
+
+@app.route("/todos/<int:todo_id>", methods=["GET"])
 def get_todo(todo_id):
     try:
         # Try to get todo from Redis cache
@@ -135,26 +149,28 @@ def get_todo(todo_id):
             return jsonify(todo.to_dict()), 200
         else:
             logger.info(f"Todo {todo_id} not found")
-            return jsonify({'error': 'Todo not found'}), 404
+            return jsonify({"error": "Todo not found"}), 404
     except Exception as e:
         logger.error(f"Unexpected error fetching todo {todo_id}: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/todos/<int:todo_id>', methods=['PUT'])
+
+@app.route("/todos/<int:todo_id>", methods=["PUT"])
 def update_todo_route(todo_id):
     try:
         data = request.get_json()
-        send_notification(todo_id, 'todo_updated', data)
+        send_notification(todo_id, "todo_updated", data)
 
-        return jsonify({
-            'message': 'Todo update has been queued',
-            'todo_id': todo_id
-        }), 202
+        return (
+            jsonify({"message": "Todo update has been queued", "todo_id": todo_id}),
+            202,
+        )
     except Exception as e:
         logger.error(f"Error updating todo {todo_id}: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/todos/<int:todo_id>', methods=['DELETE'])
+
+@app.route("/todos/<int:todo_id>", methods=["DELETE"])
 def delete_todo_route(todo_id):
     try:
         db = next(get_db())
@@ -162,15 +178,16 @@ def delete_todo_route(todo_id):
         if todo:
             db.delete(todo)
             db.commit()
-        send_notification(todo_id, 'todo_deleted')
+        send_notification(todo_id, "todo_deleted")
 
-        return jsonify({
-            'message': 'Todo deletion has been queued',
-            'todo_id': todo_id
-        }), 202
+        return (
+            jsonify({"message": "Todo deletion has been queued", "todo_id": todo_id}),
+            202,
+        )
     except Exception as e:
         logger.error(f"Error deleting todo {todo_id}: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3001)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=3001)
