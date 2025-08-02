@@ -10,24 +10,21 @@ jobs:
   deploy:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    needs: []
     strategy:
       matrix:
         service: [api, worker]
 
     steps:
-      - name: Download build artifact
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.service }}-artifact
           path: ./${{ matrix.service }}
 
-      - name: Display artifact structure
-        run: |
-          echo "Contents of ${{ matrix.service }}:"
-          ls -R ./${{ matrix.service }}
+      - name: Show contents
+        run: ls -R ./${{ matrix.service }}
 
-      - name: Deploy ${{ matrix.service }} container
+      - name: Simulate deploy
         run: |
-          echo "This is where deployment would happen."
-          echo "In a real scenario, push image or apply to k8s."
+          echo "Pretend to deploy ${{ matrix.service }} here"
+          echo "This is where you'd push the Docker image or apply Kubernetes manifests"
