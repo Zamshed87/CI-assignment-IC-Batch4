@@ -1,16 +1,14 @@
-import json
 import logging
-import os
 from datetime import datetime
 
-from config import initialize_services
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+
+from config import initialize_services
 from models import Todo, get_db
-from util import (check_elasticmq, check_postgres, check_redis, create_todo,
-                  delete_todo, get_all_todos, get_cached_todo,
-                  get_cached_todos, get_todo_by_id, send_notification,
-                  update_todo)
+from util import (check_elasticmq, check_postgres, check_redis, get_all_todos,
+                  get_cached_todo, get_cached_todos, get_todo_by_id,
+                  send_notification)
 
 # Initialize services before creating the Flask app
 initialize_services()
@@ -18,7 +16,10 @@ initialize_services()
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
+    format=(
+        "%(asctime)s - %(name)s - %(levelname)s - "
+        "[%(filename)s:%(lineno)d] - %(message)s"
+    ),
 )
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ CORS(app)
 
 # Enable debug mode
 app.debug = True
+
 
 # Add request logging middleware
 @app.before_request
@@ -55,14 +57,7 @@ def log_response_info(response):
 
 @app.route("/_health", methods=["GET"])
 def health():
-    return (
-        jsonify(
-            {
-                "status": "ok",
-            }
-        ),
-        200,
-    )
+    return jsonify({"status": "ok"}), 200
 
 
 @app.route("/health", methods=["GET"])
@@ -90,13 +85,11 @@ def health_check():
 @app.route("/todos", methods=["GET"])
 def get_todos():
     try:
-        # Try to get todos from Redis cache
         cached_data = get_cached_todos()
         if cached_data:
             logger.info("Returning todos from cache")
             return jsonify(cached_data["todos"]), 200
 
-        # If not in cache, get from database
         db = next(get_db())
         todos = get_all_todos(db)
 
@@ -126,7 +119,6 @@ def create_todo_route():
 @app.route("/todos/<int:todo_id>", methods=["GET"])
 def get_todo(todo_id):
     try:
-        # Try to get todo from Redis cache
         cached_data = None
         try:
             cached_data = get_cached_todo(todo_id)
@@ -136,7 +128,6 @@ def get_todo(todo_id):
             logger.info(f"Returning todo {todo_id} from cache")
             return jsonify(cached_data), 200
 
-        # If not in cache, get from database
         try:
             db = next(get_db())
             todo = get_todo_by_id(db, todo_id)

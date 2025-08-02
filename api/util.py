@@ -5,10 +5,11 @@ from datetime import datetime
 
 import boto3
 import redis
-from config import DLQ_URL, QUEUE_NAME, QUEUE_URL
 from dotenv import load_dotenv
-from models import Todo, get_db
 from sqlalchemy.orm import Session
+
+from config import DLQ_URL, QUEUE_NAME, QUEUE_URL
+from models import Todo, get_db
 
 # Configure logging
 logging.basicConfig(
