@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import sys
@@ -7,7 +6,6 @@ import boto3
 import psycopg2
 import redis
 from dotenv import load_dotenv
-from psycopg2 import sql
 
 # Configure logging
 logging.basicConfig(
@@ -21,7 +19,8 @@ load_dotenv()
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL") or (
     f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}"
-    f"@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
+    f"@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/"
+    f"{os.getenv('POSTGRES_DB')}"
 )
 
 # Redis configuration
@@ -35,6 +34,7 @@ SQS_REGION = os.getenv("SQS_REGION", "ap-southeast-1")
 QUEUE_NAME = os.getenv("SQS_QUEUE_NAME")
 QUEUE_URL = os.getenv("SQS_QUEUE_URL")
 DLQ_URL = os.getenv("SQS_DLQ_URL")
+
 
 # SQS setup
 def ensure_sqs_queue():
@@ -87,7 +87,7 @@ def ensure_db_table():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """
+            """
         )
         conn.commit()
         cur.close()
