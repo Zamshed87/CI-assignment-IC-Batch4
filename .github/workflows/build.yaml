@@ -1,10 +1,11 @@
+---
 name: CI - Build, Scan, Test, Lint
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 concurrency:
@@ -15,111 +16,105 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      changed_services: ${{ steps.set-matrix.outputs.services }}
+      changes: ${{ steps.filter.outputs.changes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - id: set-matrix
+      - name: List changed files
+        id: filter
         run: |
-          changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-          echo "Changed files:"
-          echo "$changed_files"
+          echo "changes=$(
+            git diff --name-only ${{ github.event.before }} ${{ github.sha }} | xargs
+          )" >> $GITHUB_OUTPUT
 
-          services=""
-          for service in api worker; do
-            if echo "$changed_files" | grep -q "^$service/"; then
-              services="$services\"$service\","
-            fi
-          done
-
-          # Remove trailing comma and wrap in brackets
-          services="[${services%,}]"
-          echo "services=$services" >> $GITHUB_OUTPUT
-
-  build-and-test:
+  ci-matrix:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.changed_services != '[]' }}
+    if: ${{ needs.detect-changes.outputs.changes != '' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.changed_services) }}
-        python-version: ["3.11"]
+        service: [api, worker]
+        python-version: ['3.11']
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install dependencies
+      - name: Install Python deps
         run: |
           pip install --upgrade pip
-          pip install -r ${{ matrix.service }}/requirements.txt
-          if [ -f "${{ matrix.service }}/requirements-dev.txt" ]; then
-            pip install -r ${{ matrix.service }}/requirements-dev.txt
-          fi
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
-      - name: Run flake8
+      - name: Linting - flake8
         run: flake8 --config=.flake8 ${{ matrix.service }}
 
-      - name: Run black check
-        run: black --check --diff ${{ matrix.service }}
-
-      - name: Run mypy
+      - name: Typing - mypy
         run: mypy --config-file=mypy.ini ${{ matrix.service }}
 
-      - name: Run isort check
-        run: isort --check-only --diff ${{ matrix.service }}
+      - name: Formatting - black
+        run: black --check --diff ${{ matrix.service }}
 
-      - name: Run unit tests
+      - name: Imports Order - isort
+        run: isort --settings-file=.isort.cfg --check-only --diff ${{ matrix.service }}
+
+      - name: Run Unit Tests (with coverage)
         run: |
-          pytest --cov=${{ matrix.service }} --cov-report=xml ${{ matrix.service }}/tests
+          pytest --cov=${{ matrix.service }} --cov-report=xml --cov-report=term-missing ${{ matrix.service }}/tests
         continue-on-error: true
 
-      - name: Upload code coverage
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           flags: ${{ matrix.service }}
+          name: ${{ matrix.service }}-coverage
+        continue-on-error: true
 
       - name: Docker build
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.service }}
-          tags: ${{ matrix.service }}:latest
+          tags: todo-${{ matrix.service }}:latest
+          push: false
           load: true
 
-      - name: Trivy CVE image scan
+      - name: Run Trivy Image CVE Scan (SARIF)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ matrix.service }}:latest
-          format: 'sarif'
-          output: trivy-${{ matrix.service }}.sarif
+          image-ref: todo-${{ matrix.service }}:latest
+          format: sarif
+          output: trivy-image-results-${{ matrix.service }}.sarif
 
-      - name: Upload Trivy SARIF
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: trivy-${{ matrix.service }}.sarif
+          sarif_file: trivy-image-results-${{ matrix.service }}.sarif
 
-      - name: Trivy Dockerfile scan
+      - name: Run Trivy config scan on Dockerfile
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: config
           format: table
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+          exit-code: 1
+          severity: CRITICAL,HIGH
           ignore-unfixed: true
           input: ./${{ matrix.service }}/Dockerfile
 
-      - name: Upload artifact for deploy
+      - name: Upload artifact for deployment
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.service }}-artifact
-          path: ./${{ matrix.service }}
+          path: |
+            ./${{ matrix.service }}
